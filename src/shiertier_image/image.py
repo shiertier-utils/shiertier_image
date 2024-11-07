@@ -1,12 +1,13 @@
 from pathlib import Path
 from typing import Union, List, BinaryIO, Optional, Tuple
-from PIL import Image
+from PIL import Image, ImageColor
+import numpy as np
 import os
-from os import makedirs
 from shiertier_logger import ez_logger as logger
 
 ImageTyping = Union[str, Path, bytes, bytearray, BinaryIO, Image.Image]
 MultiImagesTyping = Union[ImageTyping, List[ImageTyping], Tuple[ImageTyping, ...]]
+_AlphaTyping = Union[float, np.ndarray]
 
 class ImageUtils:
     DEFAULT_IMAGE_EXTENSIONS_LIST = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']
@@ -178,13 +179,85 @@ class ImageUtils:
 
         return [self.load_image(item, mode, force_background) for item in images]
     
+    def _load_image_or_color(self, image) -> Union[str, Image.Image]:
+        """Load an image or return a color string."""
+        if isinstance(image, str):
+            try:
+                _ = ImageColor.getrgb(image)
+            except ValueError:
+                pass
+            else:
+                return image
+
+        return self.load_image(image, mode='RGBA', force_background=None)
+
+    def _process(self, item):
+        """Process an image item and its alpha value."""
+        if isinstance(item, tuple):
+            image, alpha = item
+        else:
+            image, alpha = item, 1
+
+        return self._load_image_or_color(image), alpha
+
+    def _add_alpha(self, image: Image.Image, alpha: _AlphaTyping) -> Image.Image:
+        """Add or modify alpha channel of an image."""
+        data = np.array(image.convert('RGBA')).astype(np.float32)
+        data[:, :, 3] = (data[:, :, 3] * alpha).clip(0, 255)
+        return Image.fromarray(data.astype(np.uint8), mode='RGBA')
+
+    def istack(self, *items: Union[ImageTyping, str, Tuple[ImageTyping, _AlphaTyping], Tuple[str, _AlphaTyping]],
+               size: Optional[Tuple[int, int]] = None) -> Image.Image:
+        """Stack multiple images or colors with alpha channels.
+        
+        Args:
+            *items: Images, colors, or tuples of (image/color, alpha)
+            size: Optional size tuple (width, height)
+            
+        Returns:
+            PIL.Image: Stacked image
+        """
+        if size is None:
+            height, width = None, None
+            items = list(map(self._process, items))
+            for item, alpha in items:
+                if isinstance(item, Image.Image):
+                    height, width = item.height, item.width
+                    break
+        else:
+            width, height = size
+
+        if height is None:
+            raise ValueError('Unable to determine image size, please make sure '
+                           'you have provided at least one image object.')
+
+        retval = Image.fromarray(np.zeros((height, width, 4), dtype=np.uint8), mode='RGBA')
+        for item, alpha in items:
+            if isinstance(item, str):
+                current = Image.new("RGBA", (width, height), item)
+            elif isinstance(item, Image.Image):
+                current = item
+            else:
+                raise ValueError(f'Invalid type - {item!r}.')
+
+            current = self._add_alpha(current, alpha)
+            retval.paste(current, mask=current)
+
+        return retval
+
     def add_background_for_rgba(self, 
-                                image: ImageTyping, 
-                                background: str = 'white') -> Image.Image:
-        """Add a background to an RGBA image."""
-        background_image = Image.new("RGB", image.size, background)
-        background_image.paste(image, mask=image.split()[3])  # use alpha channel as mask
-        return background_image
+                               image: ImageTyping, 
+                               background: str = 'white') -> Image.Image:
+        """Add a background to an RGBA image using istack.
+        
+        Args:
+            image: Input image
+            background: Background color (default: 'white')
+            
+        Returns:
+            PIL.Image: Image with background
+        """
+        return self.istack(background, image)
 
     def resize_image(self, 
                      image: ImageTyping, 
