@@ -10,7 +10,8 @@ MultiImagesTyping = Union[ImageTyping, List[ImageTyping], Tuple[ImageTyping, ...
 _AlphaTyping = Union[float, np.ndarray]
 
 class ImageUtils:
-    DEFAULT_IMAGE_EXTENSIONS_LIST = ['.jpg', '.jpeg', '.png', '.bmp', '.webp']
+    DEFAULT_IMAGE_EXTENSIONS_LIST_STR = "jpg;jpeg;png;bmp;webp"
+
     DEFAULT_RESIZE_BUCKETS = {
         2048: [(960, 4352), (1024, 4096), (1088, 3840), (1152, 3648), (1216, 3456), (1280, 3264), 
                (1344, 3136), (1600, 2624), (1728, 2432), (1920, 2176), (1984, 2112), (2048, 2048), 
@@ -29,10 +30,21 @@ class ImageUtils:
                (704, 384), (832, 320), (1024, 256)]
     }
 
-    def __init__(self,
-                 image_extensions_list: List[str] = None,
-                 buckets: dict = None):
-        self.image_extensions_list = image_extensions_list or self.DEFAULT_IMAGE_EXTENSIONS_LIST
+    author = "shiertier"
+    email = "junjie.text@gmail.com"
+    requirements = [
+        "Pillow", 
+        "numpy", 
+        "opencv-python", 
+        "shiertier_logger"
+    ]
+
+    def __init__(
+        self,
+        image_extensions_list: List[str] = None,
+        buckets: dict = None
+    ):
+        self.image_extensions_list = image_extensions_list or os.environ.get('IMAGE_EXTENSIONS_LIST_STR', self.DEFAULT_IMAGE_EXTENSIONS_LIST_STR).split(';')
         self.buckets = buckets or self.DEFAULT_RESIZE_BUCKETS
 
     @property
@@ -99,8 +111,17 @@ class ImageUtils:
         """
         print(help_text_zh)
 
-    def add_extension(self, extension: Union[str, List[str]]):
-        """Add new image extensions to the list."""
+    def add_extension(
+        self, 
+        extension: Union[str, List[str]]
+    ):
+        """
+        Add new image extensions to the list.
+
+        Args:
+            extension: str | List[str]
+                new image extensions
+        """
         if isinstance(extension, str):
             self.image_extensions_list.append(extension)
         elif isinstance(extension, list):
@@ -108,31 +129,67 @@ class ImageUtils:
         else:
             raise TypeError(f"Unknown extension type - {extension!r}.")
 
-    def find_images_in_directory(self, 
-                                 directory: Path, 
-                                 recursive: bool = True) -> List[Path]:
-        """Find all images in a directory."""
+    def find_images_in_directory(
+        self, 
+        directory: Path, 
+        recursive: bool = True
+    ) -> List[Path]:
+        """
+        Find all images in a directory.
+
+        Args:
+            directory: Path
+                directory to find images
+            recursive: bool
+                whether to search recursively
+
+        Returns:
+            List[Path]
+                list of image paths
+        """
         images = []
         for item in directory.iterdir():
-            if item.is_file() and item.suffix.lower() in self.image_extensions_list:
+            if item.is_file() and item.suffix.lower().lstrip('.') in self.image_extensions_list:
                 images.append(item)
             elif item.is_dir() and recursive:
                 images.extend(self.find_images_in_directory(item, recursive))
         return images
     
-    def logging_if_none_image(self, 
-                              image_paths: List[Path], 
-                              raise_error: bool = True):
-        """Log a warning or raise an error if no images are found."""
+    def logging_if_none_image(
+        self, 
+        image_paths: List[Path], 
+        raise_error: bool = True
+    ):
+        """
+        Log a warning or raise an error if no images are found.
+
+        Args:
+            image_paths: List[Path]
+                list of image paths
+            raise_error: bool
+                whether to raise an error
+        """
         if len(image_paths) == 0:
             if raise_error:
                 raise ValueError("No images found")
             else:
                 logger.warning("Warning: No images found")
 
-    def filter_images_with_txt(self, 
-                               image_paths: List[Path]) -> List[Path]:
-        """Filter images that have corresponding .txt files."""
+    def filter_images_with_txt(
+        self, 
+        image_paths: List[Path]
+    ) -> List[Path]:
+        """
+        Filter images that have corresponding .txt files.
+
+        Args:
+            image_paths: List[Path]
+                list of image paths
+
+        Returns:
+            List[Path]
+                list of image paths
+        """
         image_paths_with_caption = [path for path in image_paths if Path(path).with_suffix(".txt").exists()]
         logger.info(f"Info: {len(image_paths_with_caption)} captions exist")
         image_paths_set = set(image_paths)
@@ -140,20 +197,61 @@ class ImageUtils:
         difference = image_paths_set - image_paths_with_caption_set
         return list(difference)
 
-    def _is_readable(self, obj) -> bool:
-        """Check if an object is readable."""
+    def _is_readable(
+        self, 
+        obj
+    ) -> bool:
+        """
+        Check if an object is readable.
+
+        Args:
+            obj: object
+                object to check
+
+        Returns:
+            bool
+                whether the object is readable
+        """
         return hasattr(obj, 'read') and hasattr(obj, 'seek')
 
-    def _has_alpha_channel(self, 
-                           image: Image.Image) -> bool:
-        """Check if an image has an alpha channel."""
+    def _has_alpha_channel(
+        self, 
+        image: Image.Image
+    ) -> bool:
+        """
+        Check if an image has an alpha channel.
+
+        Args:
+            image: Image.Image
+                image to check
+
+        Returns:
+            bool
+                whether the image has an alpha channel
+        """
         return any(band in {'A', 'a', 'P'} for band in image.getbands())
 
-    def load_image(self, 
-                   image: ImageTyping, 
-                   mode=None, 
-                   force_background: Optional[str] = 'white') -> Image.Image:
-        """Load an image from various input types."""
+    def load_image(
+        self, 
+        image: ImageTyping, 
+        mode=None, 
+        force_background: Optional[str] = 'white'
+    ) -> Image.Image:
+        """
+        Load an image from various input types.
+
+        Args:
+            image: ImageTyping
+                image to load
+            mode: str | None
+                mode to convert to
+            force_background: str | None
+                background to add if the image has an alpha channel
+
+        Returns:
+            Image.Image
+                loaded image
+        """
         if isinstance(image, (str, Path, bytes, bytearray, BinaryIO)) or self._is_readable(image):
             image = Image.open(image)
         elif isinstance(image, Image.Image):
@@ -169,18 +267,47 @@ class ImageUtils:
 
         return image
 
-    def load_images(self, 
-                    images: MultiImagesTyping, 
-                    mode=None, 
-                    force_background: Optional[str] = 'white') -> List[Image.Image]:
-        """Load multiple images."""
+    def load_images(
+        self, 
+        images: MultiImagesTyping, 
+        mode=None, 
+        force_background: Optional[str] = 'white'
+    ) -> List[Image.Image]:
+        """
+        Load multiple images.
+
+        Args:
+            images: MultiImagesTyping
+                images to load
+            mode: str | None
+                mode to convert to
+            force_background: str | None
+                background to add if the image has an alpha channel
+
+        Returns:
+            List[Image.Image]
+                list of loaded images
+        """
         if not isinstance(images, (list, tuple)):
             images = [images]
 
         return [self.load_image(item, mode, force_background) for item in images]
     
-    def _load_image_or_color(self, image) -> Union[str, Image.Image]:
-        """Load an image or return a color string."""
+    def _load_image_or_color(
+        self, 
+        image
+    ) -> Union[str, Image.Image]:
+        """
+        Load an image or return a color string.
+
+        Args:
+            image: ImageTyping
+                image to load
+
+        Returns:
+            Union[str, Image.Image]
+                loaded image or color string
+        """
         if isinstance(image, str):
             try:
                 _ = ImageColor.getrgb(image)
@@ -191,8 +318,21 @@ class ImageUtils:
 
         return self.load_image(image, mode='RGBA', force_background=None)
 
-    def _process(self, item):
-        """Process an image item and its alpha value."""
+    def _process(
+        self, 
+        item
+    ) -> Tuple[Union[str, Image.Image], float]:
+        """
+        Process an image item and its alpha value.
+
+        Args:
+            item: ImageTyping | Tuple[ImageTyping, float]
+                image item and its alpha value
+
+        Returns:
+            Tuple[Union[str, Image.Image], float]
+                loaded image or color string and alpha value
+        """
         if isinstance(item, tuple):
             image, alpha = item
         else:
@@ -200,20 +340,40 @@ class ImageUtils:
 
         return self._load_image_or_color(image), alpha
 
-    def _add_alpha(self, image: Image.Image, alpha: _AlphaTyping) -> Image.Image:
-        """Add or modify alpha channel of an image."""
+    def _add_alpha(
+        self, 
+        image: Image.Image, 
+        alpha: _AlphaTyping
+    ) -> Image.Image:
+        """
+        Add or modify alpha channel of an image.
+
+        Args:
+            image: Image.Image
+                image to add alpha channel to
+            alpha: _AlphaTyping
+                alpha value to add
+
+        Returns:
+            Image.Image
+                image with alpha channel
+        """
         data = np.array(image.convert('RGBA')).astype(np.float32)
         data[:, :, 3] = (data[:, :, 3] * alpha).clip(0, 255)
         return Image.fromarray(data.astype(np.uint8), mode='RGBA')
 
-    def istack(self, *items: Union[ImageTyping, str, Tuple[ImageTyping, _AlphaTyping], Tuple[str, _AlphaTyping]],
-               size: Optional[Tuple[int, int]] = None) -> Image.Image:
-        """Stack multiple images or colors with alpha channels.
-        
+    def istack(
+        self, 
+        *items: Union[ImageTyping, str, Tuple[ImageTyping, _AlphaTyping], Tuple[str, _AlphaTyping]],
+        size: Optional[Tuple[int, int]] = None
+    ) -> Image.Image:
+        """
+        Stack multiple images or colors with alpha channels.
+
         Args:
             *items: Images, colors, or tuples of (image/color, alpha)
             size: Optional size tuple (width, height)
-            
+
         Returns:
             PIL.Image: Stacked image
         """
@@ -245,11 +405,14 @@ class ImageUtils:
 
         return retval
 
-    def add_background_for_rgba(self, 
-                               image: ImageTyping, 
-                               background: str = 'white') -> Image.Image:
-        """Add a background to an RGBA image using istack.
-        
+    def add_background_for_rgba(
+        self, 
+        image: ImageTyping, 
+        background: str = 'white'
+    ) -> Image.Image:
+        """
+        Add a background to an RGBA image using istack.
+
         Args:
             image: Input image
             background: Background color (default: 'white')
@@ -259,13 +422,33 @@ class ImageUtils:
         """
         return self.istack(background, image)
 
-    def resize_image(self, 
-                     image: ImageTyping, 
-                     method: int = Image.BICUBIC, 
-                     max_size: int = 2048, 
-                     min_size: int = 1024, 
-                     buckets: dict = None) -> Optional[Image.Image]:
-        """Resize an image to fit within specified size buckets."""
+    def resize_image(
+        self, 
+        image: ImageTyping, 
+        method: int = Image.BICUBIC, 
+        max_size: int = 2048, 
+        min_size: int = 1024, 
+        buckets: dict = None
+    ) -> Optional[Image.Image]:
+        """
+        Resize an image to fit within specified size buckets.
+        
+        Args:
+            image: ImageTyping
+                image to resize
+            method: int
+                method to use for resizing
+            max_size: int
+                maximum size
+            min_size: int
+                minimum size
+            buckets: dict
+                size buckets
+
+        Returns:
+            Optional[Image.Image]
+                resized image
+        """
         if not buckets:
             buckets = self.buckets
 
@@ -307,15 +490,35 @@ class ImageUtils:
 
         return cropped_image
     
-    def resize_and_save_image(self, 
-                              image_path: str, 
-                              save_dir: str, 
-                              overwrite: bool = False, 
-                              image_dir: str = None, 
-                              max_size: int = 2048, 
-                              min_size: int = 1024, 
-                              buckets: dict = None):
-        """Resize an image and save it to a specified directory."""
+    def resize_and_save_image(
+        self, 
+        image_path: str, 
+        save_dir: str, 
+        overwrite: bool = False, 
+        image_dir: str = None, 
+        max_size: int = 2048, 
+        min_size: int = 1024, 
+        buckets: dict = None
+    ):
+        """
+        Resize an image and save it to a specified directory.
+
+        Args:
+            image_path: str
+                path to the image to resize
+            save_dir: str
+                directory to save the resized image
+            overwrite: bool
+                whether to overwrite the existing file
+            image_dir: str
+                directory of the image
+            max_size: int
+                maximum size
+            min_size: int
+                minimum size
+            buckets: dict
+                size buckets
+        """
         if image_dir:
             relative_path = os.path.relpath(image_path, image_dir)
             base_name = os.path.splitext(relative_path)[0]

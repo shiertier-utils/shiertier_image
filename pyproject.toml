@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shiertier_image"
-version = "0.1.1"
+version = "0.1.2"
 description = "A simple image processing library for Python."
 readme = "README.md"
 requires-python = ">=3.7"
@@ -24,7 +24,12 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
-dependencies = ["Pillow", "shiertier_logger", "numpy"]
+dependencies = [
+    "Pillow", 
+    "shiertier_logger", 
+    "numpy", 
+    "opencv-python"
+]
 
 [tool.setuptools]
 packages = {find = {where = ["src"]}} 
